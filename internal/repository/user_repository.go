@@ -6,104 +6,103 @@ import (
 	"todo-api/internal/model"
 )
 
+// UserRepository описывает методы работы с пользователями в БД
 type UserRepository interface {
-	Create(task *model.UserInput) (*model.UserInput, error)
+	Create(user *model.User) (*model.User, error)
 	GetByID(id uint) (*model.User, error)
 	GetByName(name string) (*model.User, error)
 	GetAll() ([]model.User, error)
-	Update(task *model.User) error
+	Update(user *model.User) error
 	Delete(id uint) error
-	Register(input *model.RegisterInput) (*model.RegisterInput, error)
-	Login(user *model.LoginInput) (*model.LoginInput, error)
 }
 
-// PostgresUserRepository implements UserRepository using PostgreSQL
+// PostgresUserRepository реализует интерфейс UserRepository
 type PostgresUserRepository struct {
 	DB *sql.DB
 }
 
-func (r *PostgresUserRepository) Register(input *model.RegisterInput) (*model.RegisterInput, error) {
-	query := `INSERT INTO user (name,  password) VALUES ($1, $2, $3, $4) RETURNING id`
-	r.DB.QueryRow(query).Scan(&input.Name)
-	return input, nil
-}
-
-func (r *PostgresUserRepository) Login(input *model.LoginInput) (*model.LoginInput, error) {
-	var t model.User
-	query := `SELECT id, name, second_name, age, password FROM user WHERE name = $2`
-	row := r.DB.QueryRow(query)
-	if err := row.Scan(&t.ID, &t.Name, &t.SecondName, &t.Age, &t.Password); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("task with name %d not found")
-		}
-		return nil, err
-	}
-	return input, nil
-}
-
+// NewPostgresUserRepository создаёт новый экземпляр репозитория
 func NewPostgresUserRepository(db *sql.DB) *PostgresUserRepository {
 	return &PostgresUserRepository{DB: db}
 }
 
+// Create создаёт нового пользователя
 func (r *PostgresUserRepository) Create(user *model.User) (*model.User, error) {
-	query := `INSERT INTO user (name, second_name, age, password) VALUES ($1, $2, $3, $4) RETURNING id`
-	r.DB.QueryRow(query, user.Name, user.SecondName, user.Age, user.Password).Scan(&user.ID)
+	query := `INSERT INTO users (name, second_name, age, password) VALUES ($1, $2, $3, $4) RETURNING id`
+	err := r.DB.QueryRow(query, user.Name, user.SecondName, user.Age, user.Password).Scan(&user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
 	return user, nil
 }
 
+// GetByID возвращает пользователя по ID
 func (r *PostgresUserRepository) GetByID(id uint) (*model.User, error) {
-	var t model.User
-	query := `SELECT id, name, second_name, age, password FROM user WHERE id = $1`
+	var user model.User
+	query := `SELECT id, name, second_name, age, password FROM users WHERE id = $1`
 	row := r.DB.QueryRow(query, id)
-	if err := row.Scan(&t.ID, &t.Name, &t.SecondName, &t.Age, &t.Password); err != nil {
+	err := row.Scan(&user.ID, &user.Name, &user.SecondName, &user.Age)
+	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("task with id %d not found", id)
+			return nil, fmt.Errorf("user with id %d not found", id)
 		}
-		return nil, err
+		return nil, fmt.Errorf("failed to get user by id: %w", err)
 	}
-	return &t, nil
+	return &user, nil
 }
 
+// GetByName возвращает пользователя по имени
 func (r *PostgresUserRepository) GetByName(name string) (*model.User, error) {
-	var t model.User
-	query := `SELECT id, name, second_name, age, password FROM user WHERE name = $2`
-	row := r.DB.QueryRow(query)
-	if err := row.Scan(&t.ID, &t.Name, &t.SecondName, &t.Age, &t.Password); err != nil {
+	var user model.User
+	query := `SELECT id, name, second_name, age, password FROM users WHERE name = $1`
+	row := r.DB.QueryRow(query, name)
+	err := row.Scan(&user.ID, &user.Name, &user.SecondName, &user.Age, &user.Password)
+	fmt.Println(&row, err, &user)
+	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("task with name %d not found", name)
+			return nil, fmt.Errorf("user with name '%s' not found", name)
 		}
-		return nil, err
+		return nil, fmt.Errorf("failed to get user by name: %w", err)
 	}
-	return &t, nil
+	return &user, nil
 }
 
+// GetAll возвращает список всех пользователей
 func (r *PostgresUserRepository) GetAll() ([]model.User, error) {
-	query := `SELECT id, name, second_name, age, password FROM user`
+	query := `SELECT id, name, second_name, age FROM users`
 	rows, err := r.DB.Query(query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get users: %w", err)
 	}
 	defer rows.Close()
 
-	var user []model.User
+	var users []model.User
 	for rows.Next() {
-		var t model.User
-		if err := rows.Scan(&t.ID, &t.Name, &t.SecondName, &t.Age, &t.Password); err != nil {
-			return nil, err
+		var user model.User
+		if err := rows.Scan(&user.ID, &user.Name, &user.SecondName, &user.Age); err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
 		}
-		user = append(user, t)
+		users = append(users, user)
 	}
-	return user, nil
+	return users, nil
 }
 
-func (r *PostgresUserRepository) Update(task *model.User) error {
-	query := `UPDATE user SET name = $1, second_name = $2, age = $3, password = $4 WHERE id = $5`
-	_, err := r.DB.Exec(query, task.Name, task.SecondName, task.Age, task.Password, task.ID)
-	return err
+// Update обновляет данные пользователя
+func (r *PostgresUserRepository) Update(user *model.User) error {
+	query := `UPDATE users SET name = $1, second_name = $2, age = $3, password = $4 WHERE id = $5`
+	_, err := r.DB.Exec(query, user.Name, user.SecondName, user.Age, user.Password, user.ID)
+	if err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+	return nil
 }
 
+// Delete удаляет пользователя по ID
 func (r *PostgresUserRepository) Delete(id uint) error {
-	query := `DELETE FROM user WHERE id = $1`
+	query := `DELETE FROM users WHERE id = $1`
 	_, err := r.DB.Exec(query, id)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+	return nil
 }

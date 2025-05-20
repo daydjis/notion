@@ -15,7 +15,7 @@ var identityKey = "id"
 func JwtMiddleware(userSvc service.UserService) (*jwt.GinJWTMiddleware, error) {
 	return jwt.New(&jwt.GinJWTMiddleware{
 		Realm:       "notion zone",
-		Key:         []byte("your-very-secret-key"), // вынесите в .env!
+		Key:         []byte("your-very-secret-key"), // TODO: вынесите в конфигурацию (.env)!
 		Timeout:     time.Hour,
 		MaxRefresh:  time.Hour,
 		IdentityKey: identityKey,
@@ -27,31 +27,36 @@ func JwtMiddleware(userSvc service.UserService) (*jwt.GinJWTMiddleware, error) {
 				"name":      u.Name,
 			}
 		},
+
 		IdentityHandler: func(c *gin.Context) interface{} {
 			claims := jwt.ExtractClaims(c)
 			return &model.User{
 				ID:   uint(claims[identityKey].(float64)),
-				Name: claims["email"].(string),
+				Name: claims["name"].(string),
 			}
 		},
+
 		Authenticator: func(c *gin.Context) (interface{}, error) {
-			var loginVals model.UserInput
+			var loginVals model.LoginInput
 			if err := c.ShouldBindJSON(&loginVals); err != nil {
 				return "", jwt.ErrMissingLoginValues
 			}
-			user, err := userSvc.CreateUser(&loginVals)
+			user, err := userSvc.AuthenticateUser(loginVals.Name, loginVals.Password)
 			if err != nil {
 				return nil, jwt.ErrFailedAuthentication
 			}
 			return user, nil
 		},
+
 		Authorizator: func(data interface{}, c *gin.Context) bool {
-			// здесь можно проверять роль или ID
+			// Здесь можно проверять роль или ID для более детальной авторизации
 			return true
 		},
+
 		Unauthorized: func(c *gin.Context, code int, message string) {
 			c.JSON(code, gin.H{"error": message})
 		},
+
 		TokenLookup:   "header: Authorization, query: token",
 		TokenHeadName: "Bearer",
 		TimeFunc:      time.Now,

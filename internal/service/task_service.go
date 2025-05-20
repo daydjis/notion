@@ -6,9 +6,9 @@ import (
 )
 
 type TaskService interface {
-	GetAll() ([]model.Task, error)
-	Create(task model.Task) (model.Task, error)
-	Delete(id int) error
+	GetAllTasks() ([]model.Task, error)
+	CreateTask(input model.CreateTaskInput) (model.Task, error)
+	DeleteTask(id uint) error
 }
 
 type taskService struct {
@@ -19,14 +19,17 @@ func NewTaskService(repo repository.TaskRepository) TaskService {
 	return &taskService{repo: repo}
 }
 
-func (s *taskService) GetAll() ([]model.Task, error) {
+func (s *taskService) GetAllTasks() ([]model.Task, error) {
 	return s.repo.GetAll()
 }
 
-func (s *taskService) Create(task model.Task) (model.Task, error) {
+func (s *taskService) CreateTask(input model.CreateTaskInput) (model.Task, error) {
+	task := model.Task{
+		Name: input.Name,
+	}
 	return s.repo.Create(task)
 }
 
-func (s *taskService) Delete(id int) error {
+func (s *taskService) DeleteTask(id uint) error {
 	return s.repo.Delete(id)
 }
