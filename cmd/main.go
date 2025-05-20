@@ -4,15 +4,16 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres" // драйвер Postgres!
+	_ "github.com/golang-migrate/migrate/v4/source/file"       // источник миграций из файлов
+	_ "github.com/lib/pq"
 	"log"
-	"os"
 	"time"
+	auth "todo-api/internal"
 	"todo-api/internal/handler"
 	"todo-api/internal/repository"
 	"todo-api/internal/service"
-
-	_ "github.com/lib/pq"
 )
 
 func waitForDB(dsn string, retries int) (*sql.DB, error) {
@@ -35,16 +36,36 @@ func waitForDB(dsn string, retries int) (*sql.DB, error) {
 
 	return nil, fmt.Errorf("database not reachable after %d attempts: %w", retries, err)
 }
+func runMigrations(dbURL string) {
+	m, err := migrate.New(
+		"file://./migrations",
+		dbURL,
+	)
+	if err != nil {
+		log.Fatalf("migrate.New: %v", err)
+	}
+	defer m.Close()
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		log.Fatalf("m.Up: %v", err)
+	}
+	//if err := m.Down(); err != nil && err != migrate.ErrNoChange {
+	//	log.Fatalf("m.Up: %v", err)
+	//}
+}
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env")
-	}
-	fmt.Println(os.Getenv("DATABASE_URL"), "asdasdada")
+	//err := godotenv.Load()
+	//
+	//if err != nil {
+	//	log.Fatal("Error loading .env")
+	//}
 
-	dsn := os.Getenv("DATABASE_URL")
-	db, err := waitForDB(dsn, 10)
+	dbURL := "postgres://myuser1:mypass@localhost:5432/mydb1?sslmode=disable"
+	runMigrations(dbURL)
+
+	//dsn := os.Getenv("DATABASE_URL")
+	db, err := waitForDB(dbURL, 10)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -52,10 +73,24 @@ func main() {
 	taskRepo := repository.NewTaskRepository(db)
 	taskService := service.NewTaskService(taskRepo)
 	taskHandler := handler.NewTaskHandler(taskService)
+
+	userRepo := repository.NewPostgresUserRepository(db)
+	userService := service.NewUserService(userRepo)
+	userHandler := handler.NewUserHandler(userService)
+
+	authMiddleware, err := auth.JwtMiddleware(userService)
+	if err != nil {
+		log.Fatal("JWT Error:" + err.Error())
+	}
+
 	gin.SetMode(gin.ReleaseMode)
 
 	r := gin.Default()
+
 	taskHandler.RegisterRoutes(r)
+	userHandler.RegisterRoutes(r)
+	r.POST("/login", authMiddleware.LoginHandler) // логин через middleware
+
 	err = db.Ping()
 	if err != nil {
 
