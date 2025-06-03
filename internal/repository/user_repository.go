@@ -1,109 +1,85 @@
 package repository
 
 import (
-	"database/sql"
 	"fmt"
 	"todo-api/internal/model"
+
+	"gorm.io/gorm"
 )
 
+// UserRepository описывает методы работы с пользователями в БД
 type UserRepository interface {
-	Create(task *model.UserInput) (*model.UserInput, error)
+	Create(user *model.User) (*model.User, error)
 	GetByID(id uint) (*model.User, error)
 	GetByName(name string) (*model.User, error)
 	GetAll() ([]model.User, error)
-	Update(task *model.User) error
+	Update(user *model.User) error
 	Delete(id uint) error
-	Register(input *model.RegisterInput) (*model.RegisterInput, error)
-	Login(user *model.LoginInput) (*model.LoginInput, error)
 }
 
-// PostgresUserRepository implements UserRepository using PostgreSQL
-type PostgresUserRepository struct {
-	DB *sql.DB
+// GormUserRepository реализует интерфейс UserRepository
+type GormUserRepository struct {
+	DB *gorm.DB
 }
 
-func (r *PostgresUserRepository) Register(input *model.RegisterInput) (*model.RegisterInput, error) {
-	query := `INSERT INTO user (name,  password) VALUES ($1, $2, $3, $4) RETURNING id`
-	r.DB.QueryRow(query).Scan(&input.Name)
-	return input, nil
+// NewUserRepo создаёт новый экземпляр репозитория
+func NewUserRepo(db *gorm.DB) *GormUserRepository {
+	return &GormUserRepository{DB: db}
 }
 
-func (r *PostgresUserRepository) Login(input *model.LoginInput) (*model.LoginInput, error) {
-	var t model.User
-	query := `SELECT id, name, second_name, age, password FROM user WHERE name = $2`
-	row := r.DB.QueryRow(query)
-	if err := row.Scan(&t.ID, &t.Name, &t.SecondName, &t.Age, &t.Password); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("task with name %d not found")
-		}
-		return nil, err
-	}
-	return input, nil
-}
-
-func NewPostgresUserRepository(db *sql.DB) *PostgresUserRepository {
-	return &PostgresUserRepository{DB: db}
-}
-
-func (r *PostgresUserRepository) Create(user *model.User) (*model.User, error) {
-	query := `INSERT INTO user (name, second_name, age, password) VALUES ($1, $2, $3, $4) RETURNING id`
-	r.DB.QueryRow(query, user.Name, user.SecondName, user.Age, user.Password).Scan(&user.ID)
-	return user, nil
-}
-
-func (r *PostgresUserRepository) GetByID(id uint) (*model.User, error) {
-	var t model.User
-	query := `SELECT id, name, second_name, age, password FROM user WHERE id = $1`
-	row := r.DB.QueryRow(query, id)
-	if err := row.Scan(&t.ID, &t.Name, &t.SecondName, &t.Age, &t.Password); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("task with id %d not found", id)
-		}
-		return nil, err
-	}
-	return &t, nil
-}
-
-func (r *PostgresUserRepository) GetByName(name string) (*model.User, error) {
-	var t model.User
-	query := `SELECT id, name, second_name, age, password FROM user WHERE name = $2`
-	row := r.DB.QueryRow(query)
-	if err := row.Scan(&t.ID, &t.Name, &t.SecondName, &t.Age, &t.Password); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("task with name %d not found", name)
-		}
-		return nil, err
-	}
-	return &t, nil
-}
-
-func (r *PostgresUserRepository) GetAll() ([]model.User, error) {
-	query := `SELECT id, name, second_name, age, password FROM user`
-	rows, err := r.DB.Query(query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var user []model.User
-	for rows.Next() {
-		var t model.User
-		if err := rows.Scan(&t.ID, &t.Name, &t.SecondName, &t.Age, &t.Password); err != nil {
-			return nil, err
-		}
-		user = append(user, t)
+// Create создаёт нового пользователя
+func (r *GormUserRepository) Create(user *model.User) (*model.User, error) {
+	if err := r.DB.Create(user).Error; err != nil {
+		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 	return user, nil
 }
 
-func (r *PostgresUserRepository) Update(task *model.User) error {
-	query := `UPDATE user SET name = $1, second_name = $2, age = $3, password = $4 WHERE id = $5`
-	_, err := r.DB.Exec(query, task.Name, task.SecondName, task.Age, task.Password, task.ID)
-	return err
+// GetByID возвращает пользователя по ID
+func (r *GormUserRepository) GetByID(id uint) (*model.User, error) {
+	var user model.User
+	if err := r.DB.First(&user, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("user with id %d not found", id)
+		}
+		return nil, fmt.Errorf("failed to get user by id: %w", err)
+	}
+	return &user, nil
 }
 
-func (r *PostgresUserRepository) Delete(id uint) error {
-	query := `DELETE FROM user WHERE id = $1`
-	_, err := r.DB.Exec(query, id)
-	return err
+// GetByName возвращает пользователя по имени
+func (r *GormUserRepository) GetByName(name string) (*model.User, error) {
+	var user model.User
+	if err := r.DB.Where("name = ?", name).First(&user).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("user with name '%s' not found", name)
+		}
+		return nil, fmt.Errorf("failed to get user by name: %w", err)
+	}
+	return &user, nil
+}
+
+// GetAll возвращает список всех пользователей
+func (r *GormUserRepository) GetAll() ([]model.User, error) {
+	var users []model.User
+	if err := r.DB.Find(&users).Error; err != nil {
+		return nil, fmt.Errorf("failed to get users: %w", err)
+	}
+	return users, nil
+}
+
+// Update обновляет данные пользователя
+func (r *GormUserRepository) Update(user *model.User) error {
+	if err := r.DB.Save(user).Error; err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+	return nil
+}
+
+// Delete удаляет пользователя по ID
+func (r *GormUserRepository) Delete(id uint) error {
+	if err := r.DB.Delete(&model.User{}, id).Error; err != nil {
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+	return nil
 }

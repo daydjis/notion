@@ -6,9 +6,9 @@ import (
 )
 
 type TaskService interface {
-	GetAll() ([]model.Task, error)
-	Create(task model.Task) (model.Task, error)
-	Delete(id int) error
+	GetAllTasks(userID uint) ([]model.Task, error)
+	CreateTask(task model.Task) (model.Task, error)
+	DeleteTask(id uint, userID uint) error
 }
 
 type taskService struct {
@@ -19,14 +19,17 @@ func NewTaskService(repo repository.TaskRepository) TaskService {
 	return &taskService{repo: repo}
 }
 
-func (s *taskService) GetAll() ([]model.Task, error) {
-	return s.repo.GetAll()
+// Получить все задачи только для пользователя
+func (s *taskService) GetAllTasks(userID uint) ([]model.Task, error) {
+	return s.repo.GetAllByUser(userID)
 }
 
-func (s *taskService) Create(task model.Task) (model.Task, error) {
+// Создать задачу для пользователя (userID прокидывается из handler)
+func (s *taskService) CreateTask(task model.Task) (model.Task, error) {
 	return s.repo.Create(task)
 }
 
-func (s *taskService) Delete(id int) error {
-	return s.repo.Delete(id)
+// Удалить задачу только если она принадлежит userID
+func (s *taskService) DeleteTask(id uint, userID uint) error {
+	return s.repo.Delete(id, userID)
 }

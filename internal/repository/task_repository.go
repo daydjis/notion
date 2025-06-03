@@ -1,48 +1,51 @@
 package repository
 
 import (
-	"database/sql"
+	"fmt"
+	"gorm.io/gorm"
 	"todo-api/internal/model"
 )
 
+// TaskRepository определяет методы доступа к задачам пользователя
 type TaskRepository interface {
-	GetAll() ([]model.Task, error)
+	GetAllByUser(userID uint) ([]model.Task, error)
 	Create(task model.Task) (model.Task, error)
-	Delete(id int) error
+	Delete(id uint, userID uint) error
 }
 
-type taskRepo struct {
-	db *sql.DB
+type gormTaskRepo struct {
+	db *gorm.DB
 }
 
-func NewTaskRepository(db *sql.DB) TaskRepository {
-	return &taskRepo{db: db}
+func NewTaskRepo(db *gorm.DB) TaskRepository {
+	return &gormTaskRepo{db: db}
 }
 
-func (r *taskRepo) GetAll() ([]model.Task, error) {
-	rows, err := r.db.Query("SELECT id, name FROM tasks")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
+// GetAllByUser возвращает все задачи для конкретного пользователя
+func (r *gormTaskRepo) GetAllByUser(userID uint) ([]model.Task, error) {
 	var tasks []model.Task
-	for rows.Next() {
-		var t model.Task
-		if err := rows.Scan(&t.ID, &t.Name); err != nil {
-			return nil, err
-		}
-		tasks = append(tasks, t)
+	if err := r.db.Where("user_id = ?", userID).Find(&tasks).Error; err != nil {
+		return nil, fmt.Errorf("failed to get tasks: %w", err)
 	}
 	return tasks, nil
 }
 
-func (r *taskRepo) Create(task model.Task) (model.Task, error) {
-	err := r.db.QueryRow("INSERT INTO tasks (name) VALUES ($1) RETURNING id", task.Name).Scan(&task.ID)
-	return task, err
+// Create создаёт новую задачу
+func (r *gormTaskRepo) Create(task model.Task) (model.Task, error) {
+	if err := r.db.Create(&task).Error; err != nil {
+		return task, fmt.Errorf("failed to create task: %w", err)
+	}
+	return task, nil
 }
 
-func (r *taskRepo) Delete(id int) error {
-	_, err := r.db.Exec("DELETE FROM tasks WHERE id = $1", id)
-	return err
+// Delete удаляет задачу только если она принадлежит пользователю
+func (r *gormTaskRepo) Delete(id uint, userID uint) error {
+	res := r.db.Where("id = ? AND user_id = ?", id, userID).Delete(&model.Task{})
+	if res.Error != nil {
+		return fmt.Errorf("failed to delete task: %w", res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("task not found or does not belong to user")
+	}
+	return nil
 }

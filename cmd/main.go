@@ -1,102 +1,57 @@
+// cmd/main.go
 package main
 
 import (
-	"database/sql"
-	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres" // драйвер Postgres!
-	_ "github.com/golang-migrate/migrate/v4/source/file"       // источник миграций из файлов
-	_ "github.com/lib/pq"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 	"log"
-	"time"
-	auth "todo-api/internal"
+	"todo-api/internal/config"
 	"todo-api/internal/handler"
+	"todo-api/internal/model"
 	"todo-api/internal/repository"
+	"todo-api/internal/router"
 	"todo-api/internal/service"
 )
 
-func waitForDB(dsn string, retries int) (*sql.DB, error) {
-	var db *sql.DB
-	var err error
-
-	for i := 0; i < retries; i++ {
-		db, err = sql.Open("postgres", dsn)
-		if err == nil {
-			err = db.Ping()
-		}
-
-		if err == nil {
-			return db, nil
-		}
-
-		log.Printf("DB not ready (attempt %d/%d): %s", i+1, retries, err)
-		time.Sleep(2 * time.Second)
-	}
-
-	return nil, fmt.Errorf("database not reachable after %d attempts: %w", retries, err)
-}
-func runMigrations(dbURL string) {
-	m, err := migrate.New(
-		"file://./migrations",
-		dbURL,
-	)
-	if err != nil {
-		log.Fatalf("migrate.New: %v", err)
-	}
-	defer m.Close()
-
-	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		log.Fatalf("m.Up: %v", err)
-	}
-	//if err := m.Down(); err != nil && err != migrate.ErrNoChange {
-	//	log.Fatalf("m.Up: %v", err)
-	//}
-}
-
 func main() {
-	//err := godotenv.Load()
-	//
-	//if err != nil {
-	//	log.Fatal("Error loading .env")
-	//}
+	// Загрузка переменных окружения
+	cfg := config.LoadConfig()
 
-	dbURL := "postgres://myuser1:mypass@localhost:5432/mydb1?sslmode=disable"
-	runMigrations(dbURL)
-
-	//dsn := os.Getenv("DATABASE_URL")
-	db, err := waitForDB(dbURL, 10)
+	// Подключение к БД через GORM
+	db, err := gorm.Open(postgres.Open(cfg.DatabaseURL), &gorm.Config{})
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("❌ Could not connect to database: %v", err)
 	}
 
-	taskRepo := repository.NewTaskRepository(db)
-	taskService := service.NewTaskService(taskRepo)
-	taskHandler := handler.NewTaskHandler(taskService)
-
-	userRepo := repository.NewPostgresUserRepository(db)
-	userService := service.NewUserService(userRepo)
-	userHandler := handler.NewUserHandler(userService)
-
-	authMiddleware, err := auth.JwtMiddleware(userService)
+	// Миграция всех моделей (сразу)
+	err = db.AutoMigrate(&model.User{}, &model.Task{}, &model.Transaction{})
 	if err != nil {
-		log.Fatal("JWT Error:" + err.Error())
+		log.Fatalf("❌ AutoMigrate error: %v", err)
 	}
+	log.Println("✅ Database schema up to date (GORM AutoMigrate)")
 
-	gin.SetMode(gin.ReleaseMode)
+	// Создание зависимостей
+	userRepo := repository.NewUserRepo(db)
+	userSvc := service.NewUserService(userRepo)
+	userHandler := handler.NewUserHandler(userSvc)
 
-	r := gin.Default()
+	taskRepo := repository.NewTaskRepo(db)
+	taskSvc := service.NewTaskService(taskRepo)
+	taskHandler := handler.NewTaskHandler(taskSvc)
 
-	taskHandler.RegisterRoutes(r)
-	userHandler.RegisterRoutes(r)
-	r.POST("/login", authMiddleware.LoginHandler) // логин через middleware
+	transactionRepo := repository.NewTransactionRepo(db)
+	transactionSvc := service.NewTransactionService(transactionRepo)
+	transactionHandler := handler.NewTransactionHandler(transactionSvc)
 
-	err = db.Ping()
-	if err != nil {
+	// Инициализация роутера и всех маршрутов
+	r := router.NewRouter(userHandler, taskHandler, transactionHandler, userSvc)
 
-		log.Fatal("Failed to ping DB:", err)
+	port := cfg.Port
+	if port == "" {
+		port = "8080"
 	}
-
-	fmt.Println("Server is running at http://localhost:8080")
-	r.Run(":8080")
+	log.Printf("🚀 Server running at http://localhost:%s", port)
+	if err := r.Run(":" + port); err != nil {
+		log.Fatalf("❌ Failed to run server: %v", err)
+	}
 }
