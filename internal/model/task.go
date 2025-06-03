@@ -1,9 +1,10 @@
 package model
 
-// Task представляет структуру задачи
 type Task struct {
-	ID   uint   `json:"id"`
-	Name string `json:"name"`
+	ID     uint   `gorm:"primaryKey" json:"id"`
+	UserID uint   `json:"user_id"` // Foreign key
+	Name   string `json:"name"`
+	// другие поля
 }
 
 // CreateTaskInput структура для создания задачи

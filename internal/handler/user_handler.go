@@ -1,6 +1,7 @@
 package handler
 
 import (
+	jwt "github.com/appleboy/gin-jwt/v2"
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"strconv"
@@ -25,6 +26,12 @@ func (h *UserHandler) RegisterRoutes(r *gin.RouterGroup) {
 // registerUser регистрирует нового пользователя (открытый маршрут)
 func (h *UserHandler) RegisterHandler(c *gin.Context) {
 	var input model.RegisterInput
+	claims := jwt.ExtractClaims(c)
+	_, ok := claims["id"]
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -42,6 +49,12 @@ func (h *UserHandler) RegisterHandler(c *gin.Context) {
 // getAllUsers возвращает список всех пользователей
 func (h *UserHandler) getAllUsers(c *gin.Context) {
 	users, err := h.Service.GetAllUsers()
+	claims := jwt.ExtractClaims(c)
+	_, ok := claims["id"]
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -54,6 +67,12 @@ func (h *UserHandler) getAllUsers(c *gin.Context) {
 func (h *UserHandler) getUserInfo(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := strconv.ParseUint(idParam, 10, 64)
+	claims := jwt.ExtractClaims(c)
+	_, ok := claims["id"]
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
 		return
@@ -72,6 +91,12 @@ func (h *UserHandler) getUserInfo(c *gin.Context) {
 func (h *UserHandler) deleteUser(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := strconv.ParseUint(idParam, 10, 64)
+	claims := jwt.ExtractClaims(c)
+	_, ok := claims["id"]
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
 		return

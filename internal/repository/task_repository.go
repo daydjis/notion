@@ -1,63 +1,51 @@
 package repository
 
 import (
-	"database/sql"
 	"fmt"
+	"gorm.io/gorm"
 	"todo-api/internal/model"
 )
 
-// TaskRepository определяет методы доступа к задачам
+// TaskRepository определяет методы доступа к задачам пользователя
 type TaskRepository interface {
-	GetAll() ([]model.Task, error)
+	GetAllByUser(userID uint) ([]model.Task, error)
 	Create(task model.Task) (model.Task, error)
-	Delete(id uint) error
+	Delete(id uint, userID uint) error
 }
 
-// taskRepo реализация TaskRepository
-type taskRepo struct {
-	db *sql.DB
+type gormTaskRepo struct {
+	db *gorm.DB
 }
 
-// NewTaskRepository создаёт экземпляр репозитория задач
-func NewTaskRepository(db *sql.DB) TaskRepository {
-	return &taskRepo{db: db}
+func NewTaskRepo(db *gorm.DB) TaskRepository {
+	return &gormTaskRepo{db: db}
 }
 
-// GetAll возвращает все задачи из БД
-func (r *taskRepo) GetAll() ([]model.Task, error) {
-	rows, err := r.db.Query("SELECT id, name FROM tasks")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get tasks: %w", err)
-	}
-	defer rows.Close()
-
+// GetAllByUser возвращает все задачи для конкретного пользователя
+func (r *gormTaskRepo) GetAllByUser(userID uint) ([]model.Task, error) {
 	var tasks []model.Task
-	for rows.Next() {
-		var t model.Task
-		if err := rows.Scan(&t.ID, &t.Name); err != nil {
-			return nil, fmt.Errorf("failed to scan task: %w", err)
-		}
-		tasks = append(tasks, t)
+	if err := r.db.Where("user_id = ?", userID).Find(&tasks).Error; err != nil {
+		return nil, fmt.Errorf("failed to get tasks: %w", err)
 	}
 	return tasks, nil
 }
 
 // Create создаёт новую задачу
-func (r *taskRepo) Create(task model.Task) (model.Task, error) {
-	query := "INSERT INTO tasks (name) VALUES ($1) RETURNING id"
-	err := r.db.QueryRow(query, task.Name).Scan(&task.ID)
-	if err != nil {
+func (r *gormTaskRepo) Create(task model.Task) (model.Task, error) {
+	if err := r.db.Create(&task).Error; err != nil {
 		return task, fmt.Errorf("failed to create task: %w", err)
 	}
 	return task, nil
 }
 
-// Delete удаляет задачу по ID
-func (r *taskRepo) Delete(id uint) error {
-	query := "DELETE FROM tasks WHERE id = $1"
-	_, err := r.db.Exec(query, id)
-	if err != nil {
-		return fmt.Errorf("failed to delete task with id %d: %w", id, err)
+// Delete удаляет задачу только если она принадлежит пользователю
+func (r *gormTaskRepo) Delete(id uint, userID uint) error {
+	res := r.db.Where("id = ? AND user_id = ?", id, userID).Delete(&model.Task{})
+	if res.Error != nil {
+		return fmt.Errorf("failed to delete task: %w", res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("task not found or does not belong to user")
 	}
 	return nil
 }

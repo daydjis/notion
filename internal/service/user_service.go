@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"golang.org/x/crypto/bcrypt"
 	"todo-api/internal/model"
@@ -8,12 +9,11 @@ import (
 )
 
 type UserService interface {
-	CreateUser(input *model.RegisterInput) (*model.User, error)
+	Register(input model.RegisterInput) (*model.User, error)
 	GetUser(id uint) (*model.User, error)
 	GetAllUsers() ([]model.User, error)
 	UpdateUser(user *model.User) (*model.User, error)
 	DeleteUser(id uint) error
-	Register(input model.RegisterInput) (*model.User, error)
 	AuthenticateUser(name, password string) (*model.User, error)
 }
 
@@ -25,8 +25,14 @@ func NewUserService(repo repository.UserRepository) UserService {
 	return &userService{repo: repo}
 }
 
-// CreateUser создаёт пользователя (используется при регистрации)
-func (s *userService) CreateUser(input *model.RegisterInput) (*model.User, error) {
+// Register регистрирует нового пользователя (проверяет уникальность)
+func (s *userService) Register(input model.RegisterInput) (*model.User, error) {
+	// Проверка на существование пользователя с таким именем
+	_, err := s.repo.GetByName(input.Name)
+	if err == nil {
+		return nil, errors.New("user already exists")
+	}
+	// bcrypt
 	hashedPass, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
@@ -76,15 +82,9 @@ func (s *userService) DeleteUser(id uint) error {
 	return nil
 }
 
-// Register регистрирует нового пользователя
-func (s *userService) Register(input model.RegisterInput) (*model.User, error) {
-	return s.CreateUser(&input)
-}
-
 // AuthenticateUser проверяет имя и пароль пользователя
 func (s *userService) AuthenticateUser(name, password string) (*model.User, error) {
 	user, err := s.repo.GetByName(name)
-	fmt.Println(name, password, user)
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
