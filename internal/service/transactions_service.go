@@ -32,6 +32,7 @@ func (s *transactionService) CreateTransaction(input model.TransactionInput, use
 		Amount:    input.Amount,
 		Type:      input.Type,
 		Category:  input.Category,
+		Currency:  input.Currency,
 		Date:      date,
 		Comment:   input.Comment,
 	}

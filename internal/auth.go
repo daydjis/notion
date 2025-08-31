@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"os"
 	"time"
 	"todo-api/internal/model"
@@ -55,6 +56,7 @@ func JwtMiddleware(userSvc service.UserService) (*jwt.GinJWTMiddleware, error) {
 				return nil, jwt.ErrMissingLoginValues
 			}
 			user, err := userSvc.AuthenticateUser(loginVals.Name, loginVals.Password)
+			fmt.Println(user, err)
 			if err != nil {
 				return nil, jwt.ErrFailedAuthentication
 			}

@@ -1,10 +1,10 @@
 package repository
 
 import (
+	"errors"
 	"fmt"
-	"todo-api/internal/model"
-
 	"gorm.io/gorm"
+	"todo-api/internal/model"
 )
 
 // UserRepository описывает методы работы с пользователями в БД
@@ -51,7 +51,7 @@ func (r *GormUserRepository) GetByID(id uint) (*model.User, error) {
 func (r *GormUserRepository) GetByName(name string) (*model.User, error) {
 	var user model.User
 	if err := r.DB.Where("name = ?", name).First(&user).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("user with name '%s' not found", name)
 		}
 		return nil, fmt.Errorf("failed to get user by name: %w", err)

@@ -24,7 +24,7 @@ func main() {
 	}
 
 	// Миграция всех моделей (сразу)
-	err = db.AutoMigrate(&model.User{}, &model.Task{}, &model.Transaction{})
+	err = db.AutoMigrate(&model.User{}, &model.Task{}, &model.Transaction{}, &model.Bank{})
 	if err != nil {
 		log.Fatalf("❌ AutoMigrate error: %v", err)
 	}
@@ -39,12 +39,16 @@ func main() {
 	taskSvc := service.NewTaskService(taskRepo)
 	taskHandler := handler.NewTaskHandler(taskSvc)
 
+	investmentRepo := repository.NewInvestmentRepo(db)
+	investmentSvc := service.NewInvestmentService(investmentRepo)
+	investmentHandler := handler.NewInvestmentHandler(investmentSvc)
+
 	transactionRepo := repository.NewTransactionRepo(db)
 	transactionSvc := service.NewTransactionService(transactionRepo)
 	transactionHandler := handler.NewTransactionHandler(transactionSvc)
 
 	// Инициализация роутера и всех маршрутов
-	r := router.NewRouter(userHandler, taskHandler, transactionHandler, userSvc)
+	r := router.NewRouter(userHandler, taskHandler, transactionHandler, investmentHandler, userSvc)
 
 	port := cfg.Port
 	if port == "" {

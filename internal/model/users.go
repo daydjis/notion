@@ -38,28 +38,32 @@ func (u *User) ToResponse() UserResponse {
 
 // Category — пример категории задачи (необязательно, но часто удобно)
 type Category struct {
-	ID    uint   `gorm:"primaryKey" json:"id"`
-	Title string `json:"title"`
-	Tasks []Task `json:"tasks,omitempty"`
+	ID        uint           `gorm:"primaryKey" json:"id"`
+	Title     string         `json:"title"`
+	Tasks     []Task         `json:"tasks,omitempty"`
+	Priority  *int           `json:"priority,omitempty"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	deletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // LoginInput — для логина
 type LoginInput struct {
-	Name     string `json:"name" binding:"required"`
-	Password string `json:"password" binding:"required"`
+	Name     string `json:"name" binding:"required,min=3,max=20"`
+	Password string `json:"password" binding:"required,min=5,max=20"`
 }
 
 // RegisterInput — для регистрации
 type RegisterInput struct {
-	Name       string  `json:"name" binding:"required"`
+	Name       string  `json:"name" validate:"required"`
 	SecondName *string `json:"second_name,omitempty"`
 	Age        *int    `json:"age,omitempty"`
-	Password   string  `json:"password" binding:"required"`
+	Password   string  `json:"password" validate:"required"`
 }
 
 // UserInput — для обновления данных пользователя
 type UserInput struct {
-	Name       string  `json:"name" binding:"required"`
+	Name       string  `json:"name" validate:"required, min=3,max=20"`
 	SecondName *string `json:"second_name,omitempty"`
 	Age        *int    `json:"age,omitempty"`
 }

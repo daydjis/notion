@@ -5,7 +5,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"strconv"
-	"todo-api/internal/model"
 	"todo-api/internal/service"
 )
 
@@ -21,29 +20,6 @@ func (h *UserHandler) RegisterRoutes(r *gin.RouterGroup) {
 	r.DELETE("/user/:id", h.deleteUser)
 	r.GET("/users", h.getAllUsers)
 	r.GET("/user/:id", h.getUserInfo)
-}
-
-// registerUser регистрирует нового пользователя (открытый маршрут)
-func (h *UserHandler) RegisterHandler(c *gin.Context) {
-	var input model.RegisterInput
-	claims := jwt.ExtractClaims(c)
-	_, ok := claims["id"]
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	user, err := h.Service.Register(input)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusCreated, user)
 }
 
 // getAllUsers возвращает список всех пользователей
